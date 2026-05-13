@@ -19,7 +19,8 @@ export function CanvasViewport() {
   const openContextMenu = useUiStore((s)=>s.openContextMenu)
   const viewport = page?.viewportState ?? { x: 0, y: 0, zoom: 1 }
   const ref = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ mode: 'pan' | 'move' | 'box' | 'resize'; start: Point; ids?: NodeId[]; original?: Record<string, {x:number;y:number;width:number;height:number}>; box?: Rect; handle?: ResizeHandle } | null>(null)
+  const drag = useRef<{ mode: 'pan' | 'move' | 'box' | 'resize' | 'create'; start: Point; ids?: NodeId[]; original?: Record<string, {x:number;y:number;width:number;height:number}>; box?: Rect; handle?: ResizeHandle; createType?: 'frame' } | null>(null)
+  const lastPointer = useRef<Point>({ x: 0, y: 0 })
   const [box, setBox] = useState<Rect | null>(null)
   const [guides, setGuides] = useState<Guide[]>([])
   const nodes = useMemo(() => page ? Object.values(page.nodes) : [], [page])
@@ -41,22 +42,62 @@ export function CanvasViewport() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const onPointerMove = (event: PointerEvent) => {
+      lastPointer.current = { x: event.clientX, y: event.clientY }
+    }
+    const onWheel = (event: WheelEvent) => {
+      const rect = element.getBoundingClientRect()
+      const client = event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : lastPointer.current
+      if (client.x < rect.left || client.x > rect.right || client.y < rect.top || client.y > rect.bottom) return
+      event.preventDefault()
+      event.stopPropagation()
+      const store = useEditorStore.getState()
+      const activePage = store.activePage
+      if (!activePage) return
+      const current = activePage.viewportState
+      if (event.ctrlKey || event.metaKey) {
+        const factor = Math.exp(-event.deltaY * 0.002)
+        const next = zoomAtPoint(current, { x: client.x - rect.left, y: client.y - rect.top }, current.zoom * factor)
+        store.setViewport(next.x, next.y, next.zoom)
+      } else {
+        store.setViewport(current.x - (event.shiftKey ? event.deltaY : event.deltaX), current.y - (event.shiftKey ? 0 : event.deltaY), current.zoom)
+      }
+    }
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    document.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    window.addEventListener('pointermove', onPointerMove, { capture: true })
+    return () => {
+      window.removeEventListener('wheel', onWheel, { capture: true })
+      document.removeEventListener('wheel', onWheel, { capture: true })
+      window.removeEventListener('pointermove', onPointerMove, { capture: true })
+    }
+  }, [])
+
   if (!page || !project) return <div className="grid flex-1 place-items-center text-muted-foreground">Loading editor...</div>
   const localPoint = (event: React.PointerEvent | React.WheelEvent) => {
     const rect = ref.current!.getBoundingClientRect()
     return screenToWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, viewport)
   }
   const pointerDown = (event: React.PointerEvent) => {
+    lastPointer.current = { x: event.clientX, y: event.clientY }
     if (event.button !== 0 && event.button !== 1) return
     const start = localPoint(event)
     if (tool === 'hand' || event.button === 1 || event.nativeEvent.getModifierState('Space')) drag.current = { mode: 'pan', start: { x: event.clientX, y: event.clientY } }
-    else if (tool === 'rectangle' || tool === 'frame' || tool === 'text') {
+    else if (tool === 'frame') {
+      const initialBox = { x: start.x, y: start.y, width: 0, height: 0 }
+      drag.current = { mode: 'create', start, box: initialBox, createType: 'frame' }
+      setBox(initialBox)
+    }
+    else if (tool === 'rectangle' || tool === 'text') {
       createNode(
-        tool === 'rectangle' ? 'rectangle' : tool === 'frame' ? 'frame' : 'text',
+        tool === 'rectangle' ? 'rectangle' : 'text',
         start.x,
         start.y,
-        tool === 'frame' ? 360 : tool === 'rectangle' ? 160 : 180,
-        tool === 'frame' ? 240 : tool === 'rectangle' ? 100 : 48,
+        tool === 'rectangle' ? 160 : 180,
+        tool === 'rectangle' ? 100 : 48,
       )
       return
     }
@@ -78,10 +119,11 @@ export function CanvasViewport() {
     openContextMenu({ x: event.clientX, y: event.clientY, scope: hit ? 'node' : 'canvas', world: point })
   }
   const pointerMove = (event: React.PointerEvent) => {
+    lastPointer.current = { x: event.clientX, y: event.clientY }
     if (!drag.current) return
     if (drag.current.mode === 'pan') { setViewport(viewport.x + event.movementX, viewport.y + event.movementY, viewport.zoom); return }
     const point = localPoint(event)
-    if (drag.current.mode === 'box') { const next = normalizeRect({ x: drag.current.start.x, y: drag.current.start.y, width: point.x - drag.current.start.x, height: point.y - drag.current.start.y }); setBox(next); return }
+    if (drag.current.mode === 'box' || drag.current.mode === 'create') { const next = normalizeRect({ x: drag.current.start.x, y: drag.current.start.y, width: point.x - drag.current.start.x, height: point.y - drag.current.start.y }); setBox(next); return }
     if ((drag.current.mode === 'move' || drag.current.mode === 'resize') && drag.current.original) {
       let next = page
       const guideList: Guide[] = []
@@ -114,17 +156,10 @@ export function CanvasViewport() {
   }
   const pointerUp = () => {
     if (drag.current?.mode === 'box' && box) select(hitTestSelection(page, box))
+    if (drag.current?.mode === 'create' && box && box.width >= 8 && box.height >= 8) createNode('frame', box.x, box.y, box.width, box.height)
     if (drag.current?.mode === 'move' || drag.current?.mode === 'resize') commitPage(drag.current.mode === 'move' ? 'Move' : 'Resize', useEditorStore.getState().activePage!)
     drag.current = null
     setBox(null); setGuides([])
-  }
-  const wheel = (event: React.WheelEvent) => {
-    event.preventDefault()
-    if (event.ctrlKey || event.metaKey) {
-      const rect = ref.current!.getBoundingClientRect()
-      const next = zoomAtPoint(viewport, { x: event.clientX - rect.left, y: event.clientY - rect.top }, viewport.zoom * (event.deltaY > 0 ? 0.9 : 1.1))
-      setViewport(next.x, next.y, next.zoom)
-    } else setViewport(viewport.x - (event.shiftKey ? event.deltaY : event.deltaX), viewport.y - (event.shiftKey ? 0 : event.deltaY), viewport.zoom)
   }
   const resizeStart = (event: React.PointerEvent, handle: ResizeHandle) => {
     event.stopPropagation()
@@ -133,13 +168,13 @@ export function CanvasViewport() {
     ;(event.currentTarget as SVGElement).setPointerCapture(event.pointerId)
   }
   return (
-    <div ref={ref} className="relative flex-1 overflow-hidden bg-[#222222]" onWheel={wheel}>
+    <div ref={ref} className="relative flex-1 overflow-hidden bg-[#222222]">
       <svg data-testid="canvas" className="h-full w-full touch-none" onContextMenu={contextMenu} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
         <GridOverlay gridSize={project.settings.gridSize} zoom={viewport.zoom}/>
         <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
-          <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#grid-minor)"/>
-          <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#grid-major)"/>
           {nodes.map((node)=><SceneNodeRenderer key={node.id} node={node} selected={selectedIds.includes(node.id)} onPointerDown={(e)=>{ e.stopPropagation(); pointerDown(e) }} onDoubleClick={(node)=> node.type === 'text' && updateSelected({ text: prompt('Edit text', node.text) ?? node.text } as never)}/>)}
+          <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#grid-minor)" pointerEvents="none"/>
+          <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#grid-major)" pointerEvents="none"/>
           <SelectionOverlay rect={selectionBounds} zoom={viewport.zoom} onResizeStart={resizeStart}/>
           <SelectionOverlay rect={box} zoom={viewport.zoom}/>
           <GuidesOverlay guides={guides}/>

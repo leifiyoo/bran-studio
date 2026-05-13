@@ -18,13 +18,13 @@ export default function LandingPage() {
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
         <Link href="/" className="flex items-center gap-3 font-semibold"><span className="grid h-9 w-9 place-items-center rounded-lg bg-foreground text-background">B</span>Bran Studio</Link>
         <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex"><a href="#features">Features</a><a href="#workflow">Workflow</a><Link href="/app/settings">Settings</Link></nav>
-        <Link href="/app"><Button variant="primary">Open App <Icon icon={icons.forward} /></Button></Link>
+        <Link href="/app"><Button>Open App <Icon icon={icons.forward} /></Button></Link>
       </header>
       <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 py-16 lg:grid-cols-[0.9fr_1.1fr]">
         <div>
           <h1 className="max-w-3xl text-5xl font-semibold leading-[1.03] tracking-tight text-neutral-950 md:text-7xl">A local-first design studio for interface builders.</h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-neutral-500">Design screens, components, tokens, and layouts in a fast, minimal editor built for future AI and code workflows.</p>
-          <div className="mt-8 flex gap-3"><Link href="/app"><Button variant="primary">Open App</Button></Link><Link href="/onboarding"><Button>Create Project</Button></Link></div>
+          <div className="mt-8 flex gap-3"><Link href="/app"><Button>Open App</Button></Link><Link href="/onboarding"><Button>Create Project</Button></Link></div>
         </div>
         <div className="panel rounded-2xl p-3 shadow-2xl shadow-black/10">
           <div className="flex h-[520px] overflow-hidden rounded-xl border border-border bg-[#e9e7df]">

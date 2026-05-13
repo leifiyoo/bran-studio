@@ -33,14 +33,14 @@ export function baseNode(type: SceneNode['type'], name: string, x: number, y: nu
 }
 
 export function makeFrame(name: string, x: number, y: number, width: number, height: number, preset?: string) {
-  return { ...baseNode('frame', name, x, y, width, height, '#ffffff'), clipContent: true, devicePreset: preset } as SceneNode
+  return { ...baseNode('frame', name, x, y, width, height, 'transparent'), clipContent: true, devicePreset: preset } as SceneNode
 }
 export function makeRect(name: string, x: number, y: number, width: number, height: number, fill = '#2357ff', radius = 12) {
   const node = { ...baseNode('rectangle', name, x, y, width, height, fill), cornerRadius: radius, strokes: [{ color: '#e5e5e5', alpha: 1, width: 1, position: 'center' as const }] } as SceneNode
   return node
 }
 export function makeText(name: string, x: number, y: number, text: string, fontSize = 16, color = '#262626') {
-  return { ...baseNode('text', name, x, y, Math.max(96, text.length * fontSize * 0.5), fontSize * 1.35, 'transparent'), text, fontFamily: 'Inter Variable', fontSize, fontWeight: 500, fontStyle: 'normal', lineHeight: Number((fontSize * 1.35).toFixed(2)), letterSpacing: -0.31, paragraphSpacing: 0, textAlignHorizontal: 'left', textAlignVertical: 'top', textDecoration: 'none', textTransform: 'none', color, autoResize: 'both' } as SceneNode
+  return { ...baseNode('text', name, x, y, Math.max(96, text.length * fontSize * 0.5), fontSize * 1.35, 'transparent'), text, fontFamily: 'Geist', fontSize, fontWeight: 500, fontStyle: 'normal', lineHeight: Number((fontSize * 1.35).toFixed(2)), letterSpacing: -0.31, paragraphSpacing: 0, textAlignHorizontal: 'left', textAlignVertical: 'top', textDecoration: 'none', textTransform: 'none', color, autoResize: 'both' } as SceneNode
 }
 
 function projectShell(name: string, description: string, projectId = ids.project()) {

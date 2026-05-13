@@ -163,10 +163,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   addPage: () => {
     const project = get().project
     if (!project) return
-    const page = { id: ids.page(), projectId: project.id, name: `Page ${get().pages.length + 1}`, nodes: {}, rootNodeIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), backgroundColor: '#f7f6f2', viewportState: { x: 240, y: 100, zoom: 1 } } as Page
-    const frame = makeFrame('Desktop 1', 80, 80, 1280, 832)
-    page.nodes[frame.id] = frame
-    page.rootNodeIds.push(frame.id)
+    const page = { id: ids.page(), projectId: project.id, name: `Page ${get().pages.length + 1}`, nodes: {}, rootNodeIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), backgroundColor: '#222222', viewportState: { x: 0, y: 0, zoom: 1 } } as Page
     set({ project: { ...project, pages: [...project.pages, page.id], activePageId: page.id }, pages: [...get().pages, page], activePage: page, selectedIds: [] })
     void get().persist()
   },

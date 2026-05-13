@@ -57,19 +57,19 @@ export default function DashboardPage() {
         <div className="flex h-8 items-center gap-2 rounded-[7.5px] px-2 text-[13px]/4 text-[#FFFFFFA6]">○ Kira&apos;s Team</div>
       </nav>
       <div className="mt-4 rounded-md border border-[#373737] p-3">
-        <div className="mb-1 text-xs/4 font-medium">Upgrade to Paper Pro</div>
+        <div className="mb-1 text-xs/4 font-medium">Upgrade to Bran Pro</div>
         <div className="text-xs/4 text-[#FFFFFFA6]">You are on the free tier.<br />Upgrade to get more features.</div>
       </div>
       <div className="mt-auto rounded-[12.5px] border border-[#373737] bg-[#00000033] p-4">
         <div className="mb-1 text-[13px]/4 font-medium text-[#81ADEC]">New release</div>
-        <div className="text-lg/7 font-medium tracking-[0.18px]">Paper desktop app</div>
+        <div className="text-lg/7 font-medium tracking-[0.18px]">Bran desktop app</div>
         <p className="mt-1 text-xs/4.5 text-[#FFFFFFA6]">Available for Windows, featuring a powerful MCP server for agentic workflows.</p>
         <div className="mt-4 flex gap-2">
           <button className="h-8 flex-1 rounded-[7.5px] bg-white text-[13px]/4 font-medium text-[#373737]">Download</button>
           <button className="h-8 flex-1 rounded-[7.5px] bg-[#FFFFFF0C] text-[13px]/4 font-medium">Docs ›</button>
         </div>
       </div>
-      <div className="flex gap-2 px-1 py-2 text-xs/4 text-[#FFFFFFA6]"><span>Paper Alpha</span><span>•</span><span>Feedback</span></div>
+      <div className="flex gap-2 px-1 py-2 text-xs/4 text-[#FFFFFFA6]"><span>Bran Alpha</span><span>•</span><span>Feedback</span></div>
     </aside>
 
     <section className="ml-60 min-w-[800px]">

@@ -1,6 +1,6 @@
 export function GridOverlay({ gridSize, zoom }: { gridSize: number; zoom: number }) {
-  const minorOpacity = zoom > 0.55 ? 0.18 : 0.08
-  const majorOpacity = zoom > 0.28 ? 0.34 : 0.18
+  const minorOpacity = zoom >= 3 ? 0.1 : 0
+  const majorOpacity = zoom >= 2 ? 0.16 : 0
   const major = gridSize * 8
   return <defs>
     <pattern id="grid-minor" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse">
