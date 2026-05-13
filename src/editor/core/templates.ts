@@ -56,12 +56,17 @@ function projectShell(name: string, description: string, projectId = ids.project
     ['Neutral / 800', '#262626'], ['Neutral / 900', '#171717'], ['Surface / White', '#ffffff'], ['Surface / Subtle', '#fcfcfc'],
     ['Accent / Blue', '#2563eb'], ['Success', '#16a34a'], ['Warning', '#d97706'], ['Danger', '#dc2626'],
   ].forEach(([name, value]) => { const id = ids.token(); tokens[id] = { id, type: 'color', name, value, alpha: 1 } })
-  return { id: projectId, name, description, createdAt: date, updatedAt: date, version: 1, pages: [], activePageId: '' as never, components: {}, styles: {}, tokens, settings: { snapToGrid: true, gridSize: 8, theme: 'system' as const, autosave: true } }
+  return { id: projectId, name, description, createdAt: date, updatedAt: date, version: 1, pages: [], activePageId: '' as never, components: {}, styles: {}, tokens, settings: { snapToGrid: true, gridSize: 8, theme: 'dark' as const, autosave: true } }
 }
 
 export function makeProjectFromTemplate(template: 'blank' | 'saas' | 'mobile' | 'landing', name = templateName(template)): { project: Project; pages: Page[] } {
   const project = projectShell(name, `${name} created in Bran Studio`)
   const pageId = ids.page()
+  if (template === 'blank') {
+    const page: Page = { id: pageId, projectId: project.id as ProjectId, name: 'Page 1', nodes: {}, rootNodeIds: [], createdAt: now(), updatedAt: now(), backgroundColor: '#222222', viewportState: { x: 0, y: 0, zoom: 1 } }
+    const completeProject = { ...project, pages: [pageId], activePageId: pageId } as Project
+    return { project: completeProject, pages: [page] }
+  }
   const frame = template === 'mobile' ? makeFrame('Mobile 1', 120, 80, 390, 844, 'Mobile 390x844') : makeFrame('Desktop 1', 80, 80, template === 'saas' ? 1440 : 1280, template === 'saas' ? 1024 : 832, 'Desktop')
   const nodes: Record<NodeId, SceneNode> = { [frame.id]: frame }
   const add = (node: SceneNode, parent = frame.id) => {
@@ -69,7 +74,6 @@ export function makeProjectFromTemplate(template: 'blank' | 'saas' | 'mobile' | 
     nodes[node.id] = node
     nodes[parent].children.push(node.id)
   }
-  if (template === 'blank') add(makeText('Label', 48, 48, 'Start designing', 32))
   if (template === 'saas') {
     add(makeRect('Sidebar', 0, 0, 244, 1024, '#111827', 0))
     add(makeText('Product title', 32, 32, 'Bran Metrics', 26, '#ffffff'))

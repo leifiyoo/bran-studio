@@ -119,8 +119,8 @@ export function CanvasViewport() {
     setBox(null); setGuides([])
   }
   const wheel = (event: React.WheelEvent) => {
+    event.preventDefault()
     if (event.ctrlKey || event.metaKey) {
-      event.preventDefault()
       const rect = ref.current!.getBoundingClientRect()
       const next = zoomAtPoint(viewport, { x: event.clientX - rect.left, y: event.clientY - rect.top }, viewport.zoom * (event.deltaY > 0 ? 0.9 : 1.1))
       setViewport(next.x, next.y, next.zoom)
@@ -133,18 +133,19 @@ export function CanvasViewport() {
     ;(event.currentTarget as SVGElement).setPointerCapture(event.pointerId)
   }
   return (
-    <div ref={ref} className="relative flex-1 overflow-hidden bg-[#d8d6cf]" onWheel={wheel}>
+    <div ref={ref} className="relative flex-1 overflow-hidden bg-[#222222]" onWheel={wheel}>
       <svg data-testid="canvas" className="h-full w-full touch-none" onContextMenu={contextMenu} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
-        <GridOverlay gridSize={project.settings.gridSize}/>
+        <GridOverlay gridSize={project.settings.gridSize} zoom={viewport.zoom}/>
         <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
-          <rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#grid)"/>
+          <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#grid-minor)"/>
+          <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#grid-major)"/>
           {nodes.map((node)=><SceneNodeRenderer key={node.id} node={node} selected={selectedIds.includes(node.id)} onPointerDown={(e)=>{ e.stopPropagation(); pointerDown(e) }} onDoubleClick={(node)=> node.type === 'text' && updateSelected({ text: prompt('Edit text', node.text) ?? node.text } as never)}/>)}
           <SelectionOverlay rect={selectionBounds} zoom={viewport.zoom} onResizeStart={resizeStart}/>
           <SelectionOverlay rect={box} zoom={viewport.zoom}/>
           <GuidesOverlay guides={guides}/>
         </g>
       </svg>
-      <div className="absolute bottom-4 left-4 rounded-md bg-panel px-3 py-1 text-xs">{Math.round(viewport.zoom * 100)}%</div>
+      <div className="absolute bottom-4 left-4 rounded-[5px] border border-[#373737] bg-[#2A2A2A] px-3 py-1 text-xs text-[#FFFFFFA6]">{Math.round(viewport.zoom * 100)}%</div>
     </div>
   )
 }

@@ -23,15 +23,24 @@ export function FillDefs({ node }: { node: SceneNode }) {
 
 export function SceneNodeRenderer({ node, selected, onPointerDown, onDoubleClick }: { node: SceneNode; selected: boolean; onPointerDown: (event: React.PointerEvent, node: SceneNode) => void; onDoubleClick: (node: SceneNode) => void }) {
   if (!node.visible) return null
-  const common = { transform: `translate(${node.x} ${node.y}) rotate(${node.rotation})`, opacity: node.opacity, onPointerDown: (event: React.PointerEvent) => onPointerDown(event, node), onDoubleClick: () => onDoubleClick(node), style: { cursor: node.locked ? 'not-allowed' : 'move' } }
+  const cssFilter = [
+    ...node.effects.map((effect) => `drop-shadow(${effect.x}px ${effect.y}px ${effect.blur}px color-mix(in srgb, ${effect.color} ${Math.round(effect.alpha * 100)}%, transparent))`),
+    typeof node.metadata.filterBlur === 'number' ? `blur(${node.metadata.filterBlur}px)` : '',
+    typeof node.metadata.filterBrightness === 'number' ? `brightness(${node.metadata.filterBrightness}%)` : '',
+    typeof node.metadata.filterContrast === 'number' ? `contrast(${node.metadata.filterContrast}%)` : '',
+  ].filter(Boolean).join(' ')
+  const common = { transform: `translate(${node.x} ${node.y}) rotate(${node.rotation})`, opacity: node.opacity, onPointerDown: (event: React.PointerEvent) => onPointerDown(event, node), onDoubleClick: () => onDoubleClick(node), style: { cursor: node.locked ? 'not-allowed' : 'move', filter: cssFilter || undefined } }
   const fill = fillPaint(node)
   const stroke = selected ? '#2357ff' : node.strokes[0]?.color ?? 'transparent'
   const strokeWidth = selected ? 2 : node.strokes[0]?.width ?? 0
+  const strokeOpacity = selected ? 1 : node.strokes[0]?.alpha ?? 1
+  const inner = node.metadata.innerShadow as { x?: number; y?: number; blur?: number; color?: string; alpha?: number } | undefined
+  const innerOverlay = inner ? <rect width={node.width} height={node.height} rx={typeof node.cornerRadius === 'number' ? node.cornerRadius : 0} fill="none" stroke={inner.color ?? '#000000'} strokeOpacity={inner.alpha ?? 0.18} strokeWidth={Math.max(1, (inner.blur ?? 2) * 2)} style={{ pointerEvents: 'none' }} /> : null
   if (node.type === 'text') {
     return <g {...common}><foreignObject width={node.width} height={node.height}><div style={{fontFamily: `${node.fontFamily}, Inter, Arial, sans-serif`, fontSize: node.fontSize, fontWeight: node.fontWeight, letterSpacing: node.letterSpacing, lineHeight: `${node.lineHeight}px`, color: node.color, whiteSpace: 'pre-wrap', overflow: 'hidden', textAlign: node.textAlignHorizontal as never}}>{node.text}</div></foreignObject>{selected && <rect width={node.width} height={node.height} fill="none" stroke="#2563eb" strokeWidth={1.5}/>}</g>
   }
   if (node.type === 'image') {
-    return <g {...common}><clipPath id={`clip-${node.id}`}><rect width={node.width} height={node.height} rx={typeof node.cornerRadius === 'number' ? node.cornerRadius : 0}/></clipPath><image href={node.src} width={node.width} height={node.height} preserveAspectRatio={node.objectFit === 'contain' ? 'xMidYMid meet' : 'xMidYMid slice'} clipPath={`url(#clip-${node.id})`}/><rect width={node.width} height={node.height} rx={typeof node.cornerRadius === 'number' ? node.cornerRadius : 0} fill="none" stroke={stroke} strokeWidth={strokeWidth}/></g>
+    return <g {...common}><clipPath id={`clip-${node.id}`}><rect width={node.width} height={node.height} rx={typeof node.cornerRadius === 'number' ? node.cornerRadius : 0}/></clipPath><image href={node.src} width={node.width} height={node.height} preserveAspectRatio={node.objectFit === 'contain' ? 'xMidYMid meet' : node.objectFit === 'fill' ? 'none' : 'xMidYMid slice'} clipPath={`url(#clip-${node.id})`}/>{innerOverlay}<rect width={node.width} height={node.height} rx={typeof node.cornerRadius === 'number' ? node.cornerRadius : 0} fill="none" stroke={stroke} strokeOpacity={strokeOpacity} strokeWidth={strokeWidth}/></g>
   }
-  return <g {...common}><FillDefs node={node}/><rect width={node.width} height={node.height} rx={typeof node.cornerRadius === 'number' ? node.cornerRadius : 0} fill={node.type === 'instance' ? '#f8fafc' : fill} stroke={stroke} strokeWidth={strokeWidth}/>{node.type === 'instance' && <text x={16} y={32} fontSize={16} fill="#2563eb">Instance</text>}</g>
+  return <g {...common}><FillDefs node={node}/><rect width={node.width} height={node.height} rx={typeof node.cornerRadius === 'number' ? node.cornerRadius : 0} fill={node.type === 'instance' ? '#f8fafc' : fill} stroke={stroke} strokeOpacity={strokeOpacity} strokeWidth={strokeWidth}/>{innerOverlay}{node.type === 'instance' && <text x={16} y={32} fontSize={16} fill="#2563eb">Instance</text>}</g>
 }
