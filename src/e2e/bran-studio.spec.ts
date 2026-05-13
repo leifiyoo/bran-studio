@@ -1,0 +1,52 @@
+import { expect, test } from '@playwright/test'
+
+test('user can complete onboarding and open editor', async ({ page }) => {
+  await page.goto('/onboarding')
+  await Promise.all([page.waitForURL(/projects/), page.getByRole('button', { name: /finish/i }).click()])
+  await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+  await expect(page.getByTitle('Rectangle (R)')).toBeVisible()
+})
+
+test('dashboard can create a project and switch theme settings', async ({ page }) => {
+  await page.goto('/app')
+  await Promise.all([page.waitForURL(/projects/), page.getByRole('button', { name: /new project/i }).click()])
+  await expect(page.getByTitle('Frame (F)')).toBeVisible()
+  await page.goto('/app/settings')
+  await page.locator('select').first().selectOption('dark')
+  await page.getByRole('button', { name: /save settings/i }).click()
+  await expect(page.locator('html')).toHaveClass(/dark/)
+})
+
+test('editor can create nodes and undo redo', async ({ page }) => {
+  await page.goto('/app')
+  await Promise.all([page.waitForURL(/projects/), page.getByRole('button', { name: /new project/i }).click()])
+  await page.getByTitle('Rectangle (R)').click()
+  await page.getByTestId('canvas').click({ position: { x: 500, y: 260 } })
+  await expect(page.getByText('Rectangle')).toBeVisible()
+  const xBefore = Number(await page.getByRole('spinbutton', { name: 'X' }).inputValue())
+  const canvasBox = await page.getByTestId('canvas').boundingBox()
+  if (!canvasBox) throw new Error('Canvas not visible')
+  await page.mouse.move(canvasBox.x + 552, canvasBox.y + 292)
+  await page.mouse.down()
+  await page.mouse.move(canvasBox.x + 592, canvasBox.y + 312, { steps: 5 })
+  await page.mouse.up()
+  const xAfter = Number(await page.getByRole('spinbutton', { name: 'X' }).inputValue())
+  expect(xAfter - xBefore).toBeGreaterThanOrEqual(56)
+  expect(xAfter - xBefore).toBeLessThanOrEqual(72)
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z')
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+Z' : 'Control+Shift+Z')
+  await expect(page.getByText('Rectangle')).toBeVisible()
+})
+
+test('editor supports zoom, context menu, and gradient fill', async ({ page }) => {
+  await page.goto('/app')
+  await Promise.all([page.waitForURL(/projects/), page.getByRole('button', { name: /new project/i }).click()])
+  await page.getByTitle('Rectangle (R)').click()
+  await page.getByTestId('canvas').click({ position: { x: 520, y: 280 } })
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+=' : 'Control+=')
+  await expect(page.getByText(/75%|74%/)).toBeVisible()
+  await page.getByTestId('canvas').click({ button: 'right', position: { x: 520, y: 280 } })
+  await expect(page.getByText('Duplicate')).toBeVisible()
+  await page.locator('select').nth(2).selectOption('linear-gradient')
+  await expect(page.getByText('Angle', { exact: true }).last()).toBeVisible()
+})
