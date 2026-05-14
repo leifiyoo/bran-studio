@@ -1,5 +1,5 @@
 import type { NodeId, Page, Project, ProjectId, SceneNode, Token } from './scene-types'
-import { defaultConstraints, defaultLayout } from './constraints'
+import { defaultConstraints, defaultExportSettings, defaultLayout, defaultLayoutGuides, defaultLayoutSizing } from './constraints'
 import { ids } from '@/lib/ids'
 
 const now = () => new Date().toISOString()
@@ -17,15 +17,23 @@ export function baseNode(type: SceneNode['type'], name: string, x: number, y: nu
     width,
     height,
     rotation: 0,
+    zIndex: 0,
     opacity: 1,
+    blendMode: 'normal',
     visible: true,
     locked: false,
     constraints: defaultConstraints,
+    layoutSizing: defaultLayoutSizing,
     layout: defaultLayout,
     fills: fill === 'transparent' ? [] : [{ type: 'solid', color: fill, alpha: 1 }],
     strokes: [],
     effects: [],
     cornerRadius: 0,
+    exportSettings: defaultExportSettings,
+    devStatus: 'none',
+    annotations: [],
+    comments: [],
+    variableModeOverrides: {},
     createdAt: date,
     updatedAt: date,
     metadata: {},
@@ -33,14 +41,14 @@ export function baseNode(type: SceneNode['type'], name: string, x: number, y: nu
 }
 
 export function makeFrame(name: string, x: number, y: number, width: number, height: number, preset?: string) {
-  return { ...baseNode('frame', name, x, y, width, height, 'transparent'), clipContent: true, devicePreset: preset } as SceneNode
+  return { ...baseNode('frame', name, x, y, width, height, 'transparent'), clipContent: true, layoutGuides: defaultLayoutGuides, canvasGuides: [], overflowBehavior: 'clip', devicePreset: preset } as SceneNode
 }
-export function makeRect(name: string, x: number, y: number, width: number, height: number, fill = '#2357ff', radius = 12) {
-  const node = { ...baseNode('rectangle', name, x, y, width, height, fill), cornerRadius: radius, strokes: [{ color: '#e5e5e5', alpha: 1, width: 1, position: 'center' as const }] } as SceneNode
+export function makeRect(name: string, x: number, y: number, width: number, height: number, fill = '#ffffff', radius = 8) {
+  const node = { ...baseNode('rectangle', name, x, y, width, height, fill), cornerRadius: radius, strokes: [] } as SceneNode
   return node
 }
 export function makeText(name: string, x: number, y: number, text: string, fontSize = 16, color = '#262626') {
-  return { ...baseNode('text', name, x, y, Math.max(96, text.length * fontSize * 0.5), fontSize * 1.35, 'transparent'), text, fontFamily: 'Geist', fontSize, fontWeight: 500, fontStyle: 'normal', lineHeight: Number((fontSize * 1.35).toFixed(2)), letterSpacing: -0.31, paragraphSpacing: 0, textAlignHorizontal: 'left', textAlignVertical: 'top', textDecoration: 'none', textTransform: 'none', color, autoResize: 'both' } as SceneNode
+  return { ...baseNode('text', name, x, y, Math.max(96, text.length * fontSize * 0.5), fontSize * 1.35, 'transparent'), text, fontFamily: 'Geist', fontSize, fontWeight: 500, fontStyle: 'normal', lineHeight: Number((fontSize * 1.35).toFixed(2)), letterSpacing: 0, paragraphSpacing: 0, paragraphIndent: 0, textAlignHorizontal: 'left', textAlignVertical: 'top', textDecoration: 'none', textTransform: 'none', textWrap: 'wrap', color, autoResize: 'both', openTypeFeatures: {}, variableFontAxes: {} } as SceneNode
 }
 
 function projectShell(name: string, description: string, projectId = ids.project()) {
@@ -56,14 +64,14 @@ function projectShell(name: string, description: string, projectId = ids.project
     ['Neutral / 800', '#262626'], ['Neutral / 900', '#171717'], ['Surface / White', '#ffffff'], ['Surface / Subtle', '#fcfcfc'],
     ['Accent / Blue', '#2563eb'], ['Success', '#16a34a'], ['Warning', '#d97706'], ['Danger', '#dc2626'],
   ].forEach(([name, value]) => { const id = ids.token(); tokens[id] = { id, type: 'color', name, value, alpha: 1 } })
-  return { id: projectId, name, description, createdAt: date, updatedAt: date, version: 1, pages: [], activePageId: '' as never, components: {}, styles: {}, tokens, settings: { snapToGrid: true, gridSize: 8, theme: 'dark' as const, autosave: true } }
+  return { id: projectId, name, description, createdAt: date, updatedAt: date, version: 2, pages: [], activePageId: '' as never, components: {}, styles: {}, tokens, variableCollections: {}, libraries: {}, settings: { snapToGrid: true, gridSize: 8, theme: 'dark' as const, autosave: true, showLayoutGuides: false, showPixelGrid: true, multiplayer: false }, enterprise: { permissions: {}, auditLog: [] } }
 }
 
 export function makeProjectFromTemplate(template: 'blank' | 'saas' | 'mobile' | 'landing', name = templateName(template)): { project: Project; pages: Page[] } {
   const project = projectShell(name, `${name} created in Bran Studio`)
   const pageId = ids.page()
   if (template === 'blank') {
-    const page: Page = { id: pageId, projectId: project.id as ProjectId, name: 'Page 1', nodes: {}, rootNodeIds: [], createdAt: now(), updatedAt: now(), backgroundColor: '#222222', viewportState: { x: 0, y: 0, zoom: 1 } }
+    const page: Page = { id: pageId, projectId: project.id as ProjectId, name: 'Page 1', nodes: {}, rootNodeIds: [], createdAt: now(), updatedAt: now(), backgroundColor: '#222222', viewportState: { x: 0, y: 0, zoom: 1 }, variableModeOverrides: {}, prototypeInteractions: [] }
     const completeProject = { ...project, pages: [pageId], activePageId: pageId } as Project
     return { project: completeProject, pages: [page] }
   }
@@ -97,7 +105,7 @@ export function makeProjectFromTemplate(template: 'blank' | 'saas' | 'mobile' | 
     add(makeRect('Preview panel', 700, 84, 450, 340, '#ffffff', 28))
     ;[0, 1, 2].forEach((i) => add(makeRect(`Feature card ${i + 1}`, 76 + i * 364, 520, 320, 170, '#f4f1e8', 20)))
   }
-  const page: Page = { id: pageId, projectId: project.id as ProjectId, name: 'Page 1', nodes, rootNodeIds: [frame.id], createdAt: now(), updatedAt: now(), backgroundColor: '#f7f6f2', viewportState: { x: 220, y: 80, zoom: 0.65 } }
+  const page: Page = { id: pageId, projectId: project.id as ProjectId, name: 'Page 1', nodes, rootNodeIds: [frame.id], createdAt: now(), updatedAt: now(), backgroundColor: '#f7f6f2', viewportState: { x: 220, y: 80, zoom: 0.65 }, variableModeOverrides: {}, prototypeInteractions: [] }
   const completeProject = { ...project, pages: [pageId], activePageId: pageId } as Project
   return { project: completeProject, pages: [page] }
 }

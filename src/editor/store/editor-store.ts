@@ -132,8 +132,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (!page || get().clipboard.length === 0) return
     let next = page
     const idsNew: NodeId[] = []
+    const offset = get().clipboard.length === 1 ? { x: get().clipboard[0].width + 50, y: 0 } : { x: 50, y: 50 }
     get().clipboard.forEach((node) => {
-      const copy = { ...structuredClone(node), id: ids.node(), x: node.x + 24, y: node.y + 24, parentId: null, children: [] }
+      const copy = { ...structuredClone(node), id: ids.node(), x: node.x + offset.x, y: node.y + offset.y, parentId: null, children: [] }
       next = addNode(next, copy)
       idsNew.push(copy.id)
     })
@@ -163,7 +164,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   addPage: () => {
     const project = get().project
     if (!project) return
-    const page = { id: ids.page(), projectId: project.id, name: `Page ${get().pages.length + 1}`, nodes: {}, rootNodeIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), backgroundColor: '#222222', viewportState: { x: 0, y: 0, zoom: 1 } } as Page
+    const page = { id: ids.page(), projectId: project.id, name: `Page ${get().pages.length + 1}`, nodes: {}, rootNodeIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), backgroundColor: '#222222', viewportState: { x: 0, y: 0, zoom: 1 }, variableModeOverrides: {}, prototypeInteractions: [] } as Page
     set({ project: { ...project, pages: [...project.pages, page.id], activePageId: page.id }, pages: [...get().pages, page], activePage: page, selectedIds: [] })
     void get().persist()
   },
@@ -199,8 +200,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const { activePage, selectedIds, project } = get()
     if (!activePage || !project || selectedIds.length === 0) return
     const id = ids.component()
-    const node = { ...makeFrame('Component', 120, 120, 240, 160), type: 'component' as const, componentId: id, description: '' }
-    const component = { id, name: 'Component', rootNodeId: node.id, nodeIds: [node.id, ...selectedIds], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    const node = { ...makeFrame('Component', 120, 120, 240, 160), type: 'component' as const, componentId: id, description: '', componentProperties: [], variantProperties: {}, slotIds: [] }
+    const component = { id, name: 'Component', rootNodeId: node.id, nodeIds: [node.id, ...selectedIds], properties: [], variants: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
     get().commitPage('Create component', addNode(activePage, node))
     set({ project: { ...project, components: { ...project.components, [id]: component } }, selectedIds: [node.id] })
     void get().persist()
@@ -208,7 +209,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   insertInstance: (componentId) => {
     const page = get().activePage
     if (!page) return
-    const node = { ...makeFrame('Instance', 180, 180, 240, 160), type: 'instance' as const, componentId, overrides: {} }
+    const node = { ...makeFrame('Instance', 180, 180, 240, 160), type: 'instance' as const, componentId, overrides: {}, variantSelection: {}, slotChildren: {} }
     get().commitPage('Insert instance', addNode(page, node))
     set({ selectedIds: [node.id] })
   },
