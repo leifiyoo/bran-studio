@@ -7,7 +7,7 @@ import { resizeRectFromHandle } from '@/editor/core/resize'
 import { detectEqualSpacing, type SpacingMatch } from '@/editor/core/smart-spacing'
 import { snapRect, type Guide } from '@/editor/core/snapping'
 import { handleEditorShortcut } from '@/editor/core/shortcuts'
-import { screenToWorld, zoomAtPoint } from '@/editor/core/transforms'
+import { screenToWorld, viewportForWheel } from '@/editor/core/transforms'
 import { useEditorStore } from '@/editor/store/editor-store'
 import type { NodeId } from '@/editor/core/scene-types'
 import { useUiStore } from '@/editor/store/ui-store'
@@ -31,6 +31,14 @@ export function CanvasViewport() {
   const nodes = useMemo(() => page ? Object.values(page.nodes) : [], [page])
   const selectedNodes = page ? selectedIds.map((id)=>page.nodes[id]).filter(Boolean) : []
   const selectionBounds = boundsForNodes(selectedNodes)
+
+  const applyWheel = (client: Point, wheel: { deltaX: number; deltaY: number; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }, rect: DOMRect) => {
+    const store = useEditorStore.getState()
+    const activePage = store.activePage
+    if (!activePage) return
+    const next = viewportForWheel(activePage.viewportState, { x: client.x - rect.left, y: client.y - rect.top }, wheel)
+    store.setViewport(next.x, next.y, next.zoom)
+  }
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -56,21 +64,15 @@ export function CanvasViewport() {
       if (client.x < rect.left || client.x > rect.right || client.y < rect.top || client.y > rect.bottom) return
       event.preventDefault()
       event.stopPropagation()
-      const store = useEditorStore.getState()
-      const activePage = store.activePage
-      if (!activePage) return
-      const current = activePage.viewportState
-      if (event.ctrlKey || event.metaKey) {
-        const factor = Math.exp(-event.deltaY * 0.002)
-        const next = zoomAtPoint(current, { x: client.x - rect.left, y: client.y - rect.top }, current.zoom * factor)
-        store.setViewport(next.x, next.y, next.zoom)
-      } else {
-        store.setViewport(current.x - (event.shiftKey ? event.deltaY : event.deltaX), current.y - (event.shiftKey ? 0 : event.deltaY), current.zoom)
-      }
+      applyWheel(client, event, rect)
     }
     element.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    document.addEventListener('wheel', onWheel, { passive: false, capture: true })
     return () => {
       element.removeEventListener('wheel', onWheel)
+      window.removeEventListener('wheel', onWheel, { capture: true })
+      document.removeEventListener('wheel', onWheel, { capture: true })
     }
   }, [])
 
@@ -153,7 +155,14 @@ export function CanvasViewport() {
     ;(event.currentTarget as SVGElement).setPointerCapture(event.pointerId)
   }
   return (
-    <div ref={ref} className="relative flex-1 overflow-hidden bg-[#222222]">
+    <div ref={ref} className="relative flex-1 overflow-hidden bg-[#222222]" onWheelCapture={(event) => {
+      const rect = event.currentTarget.getBoundingClientRect()
+      const client = event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : lastPointer.current
+      if (client.x < rect.left || client.x > rect.right || client.y < rect.top || client.y > rect.bottom) return
+      event.preventDefault()
+      event.stopPropagation()
+      applyWheel(client, event, rect)
+    }}>
       <svg data-testid="canvas" className="h-full w-full touch-none" onContextMenu={contextMenu} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
         <GridOverlay gridSize={project.settings.gridSize} zoom={viewport.zoom}/>
         <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>

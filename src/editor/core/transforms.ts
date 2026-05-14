@@ -15,5 +15,19 @@ export function zoomAtPoint(viewport: ViewportState, screen: Point, nextZoom: nu
   const before = screenToWorld(screen, viewport)
   return { zoom, x: screen.x - before.x * zoom, y: screen.y - before.y * zoom }
 }
+export type WheelViewportInput = { deltaX: number; deltaY: number; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }
+
+export function viewportForWheel(viewport: ViewportState, screen: Point, wheel: WheelViewportInput): ViewportState {
+  const mostlyVertical = Math.abs(wheel.deltaY) >= Math.abs(wheel.deltaX)
+  if (wheel.ctrlKey || wheel.metaKey || (!wheel.shiftKey && mostlyVertical)) {
+    const factor = Math.exp(-wheel.deltaY * 0.002)
+    return zoomAtPoint(viewport, screen, viewport.zoom * factor)
+  }
+  return {
+    ...viewport,
+    x: viewport.x - (wheel.shiftKey ? wheel.deltaY : wheel.deltaX),
+    y: viewport.y - (wheel.shiftKey ? 0 : wheel.deltaY),
+  }
+}
 export const screenToCanvas = screenToWorld
 export const zoomToPoint = zoomAtPoint

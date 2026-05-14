@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { boundsForNodes, containsPoint, normalizeRect, snapValue } from '@/editor/core/geometry'
 import { hitTest } from '@/editor/core/hit-testing'
 import { snapRect } from '@/editor/core/snapping'
-import { screenToWorld, worldToScreen, zoomAtPoint } from '@/editor/core/transforms'
+import { viewportForWheel, screenToWorld, worldToScreen, zoomAtPoint } from '@/editor/core/transforms'
 import { handleEditorShortcut } from '@/editor/core/shortcuts'
 import { History } from '@/editor/core/history'
 import { applyAutoLayout } from '@/editor/core/layout-engine'
@@ -46,6 +46,12 @@ describe('transforms and history', () => {
     h.push({ label: 'n', before: 1, after: 2 })
     expect(h.undo(2)).toBe(1)
     expect(h.redo(1)).toBe(2)
+  })
+
+  it('zooms canvas viewport from wheel input without changing the anchor point', () => {
+    const next = viewportForWheel({ x: 0, y: 0, zoom: 1 }, { x: 100, y: 100 }, { deltaX: 0, deltaY: -120, ctrlKey: true, metaKey: false, shiftKey: false })
+    expect(next.zoom).toBeGreaterThan(1)
+    expect(screenToWorld({ x: 100, y: 100 }, next)).toEqual({ x: 100, y: 100 })
   })
 })
 
@@ -163,6 +169,11 @@ describe('editor feel sprint', () => {
     const rect = makeRect('Rectangle', 0, 0, 120, 80)
     expect(rect.fills[0]).toMatchObject({ type: 'solid', color: '#ffffff', alpha: 1 })
     expect(rect.strokes).toEqual([])
+  })
+
+  it('creates frames with square corners by default', () => {
+    const frame = makeFrame('Frame', 0, 0, 320, 240)
+    expect(frame.cornerRadius).toBe(0)
   })
 
   it('preserves aspect ratio and supports center resizing', () => {
