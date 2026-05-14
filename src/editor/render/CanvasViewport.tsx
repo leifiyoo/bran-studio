@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { boundsForNodes, normalizeRect, type Point, type Rect } from '@/editor/core/geometry'
 import { hitTest, hitTestSelection } from '@/editor/core/hit-testing'
+import { resizeRectFromHandle } from '@/editor/core/resize'
+import { detectEqualSpacing, type SpacingMatch } from '@/editor/core/smart-spacing'
 import { snapRect, type Guide } from '@/editor/core/snapping'
 import { handleEditorShortcut } from '@/editor/core/shortcuts'
 import { screenToWorld, zoomAtPoint } from '@/editor/core/transforms'
@@ -11,18 +13,21 @@ import type { NodeId } from '@/editor/core/scene-types'
 import { useUiStore } from '@/editor/store/ui-store'
 import { GridOverlay } from './GridOverlay'
 import { GuidesOverlay } from './GuidesOverlay'
+import { LayoutGuidesOverlay } from './LayoutGuidesOverlay'
 import { SceneNodeRenderer } from './SceneNodeRenderer'
 import { SelectionOverlay, type ResizeHandle } from './SelectionOverlay'
+import { SpacingOverlay } from './SpacingOverlay'
 
 export function CanvasViewport() {
   const { activePage: page, selectedIds, tool, select, commitPage, setViewport, createNode, updateSelected, project } = useEditorStore()
   const openContextMenu = useUiStore((s)=>s.openContextMenu)
   const viewport = page?.viewportState ?? { x: 0, y: 0, zoom: 1 }
   const ref = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ mode: 'pan' | 'move' | 'box' | 'resize' | 'create'; start: Point; ids?: NodeId[]; original?: Record<string, {x:number;y:number;width:number;height:number}>; box?: Rect; handle?: ResizeHandle; createType?: 'frame' } | null>(null)
+  const drag = useRef<{ mode: 'pan' | 'move' | 'box' | 'resize' | 'create'; start: Point; ids?: NodeId[]; original?: Record<string, {x:number;y:number;width:number;height:number}>; box?: Rect; handle?: ResizeHandle; createType?: 'frame' | 'rectangle' | 'text' } | null>(null)
   const lastPointer = useRef<Point>({ x: 0, y: 0 })
   const [box, setBox] = useState<Rect | null>(null)
   const [guides, setGuides] = useState<Guide[]>([])
+  const [spacing, setSpacing] = useState<SpacingMatch[]>([])
   const nodes = useMemo(() => page ? Object.values(page.nodes) : [], [page])
   const selectedNodes = page ? selectedIds.map((id)=>page.nodes[id]).filter(Boolean) : []
   const selectionBounds = boundsForNodes(selectedNodes)
@@ -45,9 +50,6 @@ export function CanvasViewport() {
   useEffect(() => {
     const element = ref.current
     if (!element) return
-    const onPointerMove = (event: PointerEvent) => {
-      lastPointer.current = { x: event.clientX, y: event.clientY }
-    }
     const onWheel = (event: WheelEvent) => {
       const rect = element.getBoundingClientRect()
       const client = event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : lastPointer.current
@@ -66,13 +68,9 @@ export function CanvasViewport() {
         store.setViewport(current.x - (event.shiftKey ? event.deltaY : event.deltaX), current.y - (event.shiftKey ? 0 : event.deltaY), current.zoom)
       }
     }
-    window.addEventListener('wheel', onWheel, { passive: false, capture: true })
-    document.addEventListener('wheel', onWheel, { passive: false, capture: true })
-    window.addEventListener('pointermove', onPointerMove, { capture: true })
+    element.addEventListener('wheel', onWheel, { passive: false })
     return () => {
-      window.removeEventListener('wheel', onWheel, { capture: true })
-      document.removeEventListener('wheel', onWheel, { capture: true })
-      window.removeEventListener('pointermove', onPointerMove, { capture: true })
+      element.removeEventListener('wheel', onWheel)
     }
   }, [])
 
@@ -86,20 +84,10 @@ export function CanvasViewport() {
     if (event.button !== 0 && event.button !== 1) return
     const start = localPoint(event)
     if (tool === 'hand' || event.button === 1 || event.nativeEvent.getModifierState('Space')) drag.current = { mode: 'pan', start: { x: event.clientX, y: event.clientY } }
-    else if (tool === 'frame') {
+    else if (tool === 'frame' || tool === 'rectangle' || tool === 'text') {
       const initialBox = { x: start.x, y: start.y, width: 0, height: 0 }
-      drag.current = { mode: 'create', start, box: initialBox, createType: 'frame' }
+      drag.current = { mode: 'create', start, box: initialBox, createType: tool }
       setBox(initialBox)
-    }
-    else if (tool === 'rectangle' || tool === 'text') {
-      createNode(
-        tool === 'rectangle' ? 'rectangle' : 'text',
-        start.x,
-        start.y,
-        tool === 'rectangle' ? 160 : 180,
-        tool === 'rectangle' ? 100 : 48,
-      )
-      return
     }
     else {
       const hit = hitTest(page, start)
@@ -137,11 +125,7 @@ export function CanvasViewport() {
         if (drag.current?.mode === 'resize') {
           const original = drag.current.original?.[id]
           if (!original) return
-          const patch = { x: original.x, y: original.y, width: original.width, height: original.height }
-          if (drag.current.handle?.includes('e')) patch.width = Math.max(8, original.width + dx)
-          if (drag.current.handle?.includes('s')) patch.height = Math.max(8, original.height + dy)
-          if (drag.current.handle?.includes('w')) { patch.x = original.x + dx; patch.width = Math.max(8, original.width - dx) }
-          if (drag.current.handle?.includes('n')) { patch.y = original.y + dy; patch.height = Math.max(8, original.height - dy) }
+          const patch = resizeRectFromHandle(original, drag.current.handle ?? 'se', dx, dy, { preserveAspectRatio: event.shiftKey, resizeFromCenter: event.altKey, minSize: 8 })
           next = { ...next, nodes: { ...next.nodes, [id]: { ...node, ...patch } } }
           return
         }
@@ -149,6 +133,7 @@ export function CanvasViewport() {
         const snap = snapRect(page, moving, node.id, project.settings.gridSize, project.settings.snapToGrid)
         guideList.push(...snap.guides)
         next = { ...next, nodes: { ...next.nodes, [id]: { ...node, x: snap.x, y: snap.y } } }
+        setSpacing(detectEqualSpacing(Object.values(page.nodes).filter((candidate) => candidate.id !== node.id), { ...moving, x: snap.x, y: snap.y }, 4))
       })
       useEditorStore.setState({ activePage: next, pages: useEditorStore.getState().pages.map((p)=>p.id === next.id ? next : p) })
       setGuides(guideList)
@@ -156,10 +141,10 @@ export function CanvasViewport() {
   }
   const pointerUp = () => {
     if (drag.current?.mode === 'box' && box) select(hitTestSelection(page, box))
-    if (drag.current?.mode === 'create' && box && box.width >= 8 && box.height >= 8) createNode('frame', box.x, box.y, box.width, box.height)
+    if (drag.current?.mode === 'create' && box && box.width >= 8 && box.height >= 8) createNode(drag.current.createType ?? 'frame', box.x, box.y, Math.max(8, box.width), Math.max(drag.current.createType === 'text' ? 24 : 8, box.height))
     if (drag.current?.mode === 'move' || drag.current?.mode === 'resize') commitPage(drag.current.mode === 'move' ? 'Move' : 'Resize', useEditorStore.getState().activePage!)
     drag.current = null
-    setBox(null); setGuides([])
+    setBox(null); setGuides([]); setSpacing([])
   }
   const resizeStart = (event: React.PointerEvent, handle: ResizeHandle) => {
     event.stopPropagation()
@@ -175,9 +160,11 @@ export function CanvasViewport() {
           {nodes.map((node)=><SceneNodeRenderer key={node.id} node={node} selected={selectedIds.includes(node.id)} onPointerDown={(e)=>{ e.stopPropagation(); pointerDown(e) }} onDoubleClick={(node)=> node.type === 'text' && updateSelected({ text: prompt('Edit text', node.text) ?? node.text } as never)}/>)}
           <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#grid-minor)" pointerEvents="none"/>
           <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#grid-major)" pointerEvents="none"/>
+          {project.settings.showLayoutGuides && <LayoutGuidesOverlay nodes={nodes} />}
           <SelectionOverlay rect={selectionBounds} zoom={viewport.zoom} onResizeStart={resizeStart}/>
-          <SelectionOverlay rect={box} zoom={viewport.zoom}/>
+          <SelectionOverlay rect={box} zoom={viewport.zoom} variant={drag.current?.mode === 'create' ? 'create' : 'marquee'}/>
           <GuidesOverlay guides={guides}/>
+          <SpacingOverlay matches={spacing} zoom={viewport.zoom}/>
         </g>
       </svg>
       <div className="absolute bottom-4 left-4 rounded-[5px] border border-[#373737] bg-[#2A2A2A] px-3 py-1 text-xs text-[#FFFFFFA6]">{Math.round(viewport.zoom * 100)}%</div>

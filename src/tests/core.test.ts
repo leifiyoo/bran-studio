@@ -7,9 +7,16 @@ import { handleEditorShortcut } from '@/editor/core/shortcuts'
 import { History } from '@/editor/core/history'
 import { applyAutoLayout } from '@/editor/core/layout-engine'
 import { makeFrame, makeProjectFromTemplate, makeRect } from '@/editor/core/templates'
+import type { FrameNode } from '@/editor/core/scene-types'
 import { exportProject } from '@/editor/core/export'
 import { importProjectJson } from '@/editor/core/import'
 import { addNode } from '@/editor/core/commands'
+import { describeNodeForDevMode } from '@/editor/core/dev-inspect'
+import { layoutGuideSegments } from '@/editor/core/layout-guides'
+import { migrateExportPayload } from '@/editor/core/migrations'
+import { resolveVariableValue } from '@/editor/core/variables'
+import { resizeRectFromHandle } from '@/editor/core/resize'
+import { detectEqualSpacing } from '@/editor/core/smart-spacing'
 
 describe('geometry', () => {
   it('normalizes and tests bounds', () => {
@@ -79,5 +86,104 @@ describe('layout and import export', () => {
     const two = makeFrame('Two', 10, 10, 20, 20)
     expect(boundsForNodes([one, two])?.width).toBe(30)
     expect(one.id).not.toBe(two.id)
+  })
+})
+
+describe('figma paper foundation', () => {
+  it('creates extended professional node metadata on new nodes', () => {
+    const frame = makeFrame('Desktop', 0, 0, 1440, 900) as FrameNode
+    expect(frame.blendMode).toBe('normal')
+    expect(frame.layoutSizing.horizontal).toBe('fixed')
+    expect(frame.exportSettings[0].format).toBe('png')
+    expect(frame.devStatus).toBe('none')
+    expect(frame.layoutGuides[0]).toMatchObject({ type: 'uniform', size: 8, visible: true })
+  })
+
+  it('migrates legacy exports to the latest schema without losing content', () => {
+    const { project, pages } = makeProjectFromTemplate('blank')
+    const legacy = {
+      format: 'bran.project',
+      version: 1,
+      exportedAt: '2026-01-01T00:00:00.000Z',
+      project: { ...project, version: 1 },
+      pages,
+      assets: [],
+    }
+    const migrated = migrateExportPayload(legacy)
+    expect(migrated.version).toBe(2)
+    expect(migrated.project.version).toBe(2)
+    expect(migrated.pages[0].variableModeOverrides).toEqual({})
+    const exported = JSON.stringify(migrated)
+    expect(importProjectJson(exported).project.version).toBe(2)
+  })
+
+  it('computes layout guide segments for uniform, columns, and rows', () => {
+    const frame = makeFrame('Guided frame', 10, 20, 120, 80) as FrameNode
+    frame.layoutGuides = [
+      { id: 'grid', type: 'uniform', size: 20, color: '#ffffff', opacity: 0.2, visible: true },
+      { id: 'cols', type: 'columns', count: 3, gutter: 10, margin: 5, color: '#ff00aa', opacity: 0.35, visible: true },
+      { id: 'rows', type: 'rows', count: 2, gutter: 8, margin: 4, color: '#00ffaa', opacity: 0.35, visible: true },
+    ]
+    const segments = layoutGuideSegments(frame)
+    expect(segments.some((segment) => segment.kind === 'uniform')).toBe(true)
+    expect(segments.filter((segment) => segment.kind === 'column').length).toBe(6)
+    expect(segments.filter((segment) => segment.kind === 'row').length).toBe(4)
+  })
+
+  it('resolves variable aliases and mode overrides', () => {
+    const { project } = makeProjectFromTemplate('blank')
+    project.variableCollections = {
+      colors: {
+        id: 'colors',
+        name: 'Colors',
+        defaultModeId: 'light',
+        modes: { light: { id: 'light', name: 'Light' }, dark: { id: 'dark', name: 'Dark' } },
+        variables: {
+          base: { id: 'base', name: 'Base', type: 'color', valuesByMode: { light: '#ffffff', dark: '#111111' } },
+          surface: { id: 'surface', name: 'Surface', type: 'color', valuesByMode: { light: { type: 'alias', variableId: 'base' }, dark: { type: 'alias', variableId: 'base' } } },
+        },
+      },
+    }
+    expect(resolveVariableValue(project, 'surface', { colors: 'dark' })).toBe('#111111')
+  })
+
+  it('describes selected nodes for dev mode and code export', () => {
+    const node = makeRect('CTA', 12, 24, 160, 48, '#2357ff', 12)
+    node.strokes = [{ color: '#111111', alpha: 1, width: 2, position: 'inside', align: 'inside', cap: 'butt', join: 'miter', dash: [] }]
+    const inspected = describeNodeForDevMode(node)
+    expect(inspected.css).toContain('position: absolute;')
+    expect(inspected.css).toContain('border-radius: 12px;')
+    expect(inspected.tailwind).toContain('absolute')
+    expect(inspected.measurements.width).toBe(160)
+  })
+})
+
+describe('editor feel sprint', () => {
+  it('creates white rectangles without default strokes', () => {
+    const rect = makeRect('Rectangle', 0, 0, 120, 80)
+    expect(rect.fills[0]).toMatchObject({ type: 'solid', color: '#ffffff', alpha: 1 })
+    expect(rect.strokes).toEqual([])
+  })
+
+  it('preserves aspect ratio and supports center resizing', () => {
+    const original = { x: 10, y: 20, width: 200, height: 100 }
+    const proportional = resizeRectFromHandle(original, 'se', 40, 10, { preserveAspectRatio: true, resizeFromCenter: false, minSize: 8 })
+    expect(proportional.width / proportional.height).toBeCloseTo(2)
+    const centered = resizeRectFromHandle(original, 'e', 20, 0, { preserveAspectRatio: false, resizeFromCenter: true, minSize: 8 })
+    expect(centered.x).toBe(-10)
+    expect(centered.width).toBe(240)
+  })
+
+  it('detects equal spacing candidates while moving', () => {
+    const left = makeRect('Left', 0, 0, 100, 100)
+    const middle = makeRect('Middle', 150, 0, 100, 100)
+    const moving = { x: 300, y: 0, width: 100, height: 100 }
+    const matches = detectEqualSpacing([left, middle], moving, 4)
+    expect(matches).toContainEqual(expect.objectContaining({ orientation: 'horizontal', spacing: 50 }))
+  })
+
+  it('ships common export presets for production handoff', () => {
+    const rect = makeRect('Exportable', 0, 0, 100, 100)
+    expect(rect.exportSettings.map((setting) => setting.format)).toEqual(['png', 'jpg', 'svg', 'webp', 'avif', 'pdf'])
   })
 })

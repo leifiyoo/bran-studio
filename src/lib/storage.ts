@@ -1,5 +1,6 @@
 import { db, type AssetRecord } from './db'
 import type { Page, Project, ProjectId } from '@/editor/core/scene-types'
+import { migrateLoadedProject } from '@/editor/core/migrations'
 
 export async function saveProject(project: Project, pages: Page[]) {
   if (!db) return
@@ -20,7 +21,7 @@ export async function loadProject(projectId: ProjectId) {
   const project = await db.projects.get(projectId)
   if (!project) return null
   const pages = await db.pages.where('projectId').equals(projectId).toArray()
-  return { project, pages }
+  return migrateLoadedProject(project, pages)
 }
 
 export async function deleteProject(projectId: ProjectId) {

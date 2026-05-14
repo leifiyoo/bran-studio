@@ -1,14 +1,15 @@
 'use client'
 
 import type { ChangeEvent, ReactNode } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { downloadText, pageToSvg } from '@/editor/core/export'
+import { downloadPagePdf, downloadPageRaster, downloadText, pageToSvg } from '@/editor/core/export'
 import type { Effect, Fill, SceneNode, Stroke } from '@/editor/core/scene-types'
 import { useEditorStore } from '@/editor/store/editor-store'
 
 const fieldShadow = '#FFFFFF08 0px 1px 0px inset, #FFFFFF11 0px 0px 1px 0.5px inset, #00000022 0px 1px 0.5px, #000000BB 0px 0px 3px -1px'
 const solidFill = (color = '#282828', alpha = 1): Fill => ({ type: 'solid', color, alpha })
-const defaultStroke: Stroke = { color: '#ffffff', alpha: 0.05, width: 1, position: 'center' }
+const defaultStroke: Stroke = { color: '#ffffff', alpha: 0.05, width: 1, position: 'center', cap: 'butt', join: 'miter', dash: [] }
 const defaultShadow: Effect = { type: 'drop-shadow', x: 0, y: 2, blur: 3, spread: 0, color: '#000000', alpha: 0.2 }
 const defaultInner = { x: 0, y: 2, blur: 3, spread: 0, color: '#000000', alpha: 0.2 }
 const linearPreset: Fill = { type: 'linear-gradient', angle: 135, alpha: 1, stops: [{ color: '#ffffff', position: 0, alpha: 1 }, { color: '#737373', position: 100, alpha: 1 }] }
@@ -39,13 +40,14 @@ function IconButton({ children, onClick, title, muted = false }: { children: Rea
   return <Button type="button" title={title} onClick={onClick} variant="ghost" size="icon-xs" className={`rounded-[5px] text-xs hover:bg-white/5 ${muted ? 'text-[#FFFFFF80]' : 'text-[#FFFFFFE6]'}`}>{children}</Button>
 }
 
-function Section({ title, children, onAdd, muted = false, actions }: { title: string; children?: ReactNode; onAdd?: () => void; muted?: boolean; actions?: ReactNode }) {
+function Section({ title, children, onAdd, muted = false, actions, collapsible = false, defaultOpen = true }: { title: string; children?: ReactNode; onAdd?: () => void; muted?: boolean; actions?: ReactNode; collapsible?: boolean; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
   return <section className="border-b border-[#373737]">
     <div className="flex h-8 items-center justify-between px-3">
-      <div className={`font-medium ${muted ? 'text-[#FFFFFF80]' : 'text-[#FFFFFFE6]'}`}>{title}</div>
-      <div className="flex items-center gap-2">{actions ?? <IconButton muted={muted && !onAdd} onClick={onAdd}>+</IconButton>}</div>
+      <button type="button" className={`text-left font-medium ${muted ? 'text-[#FFFFFF80]' : 'text-[#FFFFFFE6]'}`} onClick={() => collapsible && setOpen(!open)}>{title}</button>
+      <div className="flex items-center gap-2">{actions ?? <IconButton muted={muted && !onAdd} onClick={collapsible ? () => setOpen(!open) : onAdd}>{collapsible ? (open ? '-' : '+') : '+'}</IconButton>}</div>
     </div>
-    {children && <div className="-mt-2 py-2">{children}</div>}
+    {children && open && <div className="py-2">{children}</div>}
   </section>
 }
 
@@ -88,11 +90,22 @@ function NumberField({ label, value, onChange, suffix = '', min, max, icon }: { 
 }
 
 function SelectField({ icon, value, onChange, children }: { icon?: ReactNode; value: string; onChange: (value: string) => void; children: ReactNode }) {
-  return <label className="relative flex h-6 min-w-0 flex-1 basis-0 items-center">
+  const [open, setOpen] = useState(false)
+  const options = Array.isArray(children) ? children : [children]
+  const selected = options.find((child) => typeof child === 'object' && child && 'props' in child && (child.props as { value?: string }).value === value)
+  const label = selected && typeof selected === 'object' && 'props' in selected ? (selected.props as { children?: ReactNode }).children : value
+  return <div className="relative flex h-6 min-w-0 flex-1 basis-0 items-center" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false) }}>
     <div className="absolute left-0 top-0 z-10 grid size-6 place-items-center text-[#FFFFFF66]">{icon}</div>
-    <select className="h-6 w-full appearance-none rounded-[5px] bg-[#373737] pb-px pl-6 pr-5 text-xs leading-6 text-[#FFFFFFE6] outline-none [box-shadow:var(--field-shadow)] focus:[outline:2px_solid_#427FD8] focus:[outline-offset:-1px]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} value={value} onChange={(event) => onChange(event.target.value)}>{children}</select>
-    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#FFFFFFA6]">v</span>
-  </label>
+    <button type="button" className="h-6 w-full rounded-[5px] bg-[#373737] pb-px pl-6 pr-5 text-left text-xs leading-6 text-[#FFFFFFE6] outline-none [box-shadow:var(--field-shadow)] focus:[outline:2px_solid_#427FD8] focus:[outline-offset:-1px]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => setOpen(!open)}>{label}</button>
+    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#FFFFFFA6]">⌄</span>
+    {open && <div className="absolute left-0 top-7 z-50 min-w-full rounded-md border border-[#4A4A4A] bg-[#303030] p-1 shadow-2xl">
+      {options.map((child, index) => {
+        if (!(typeof child === 'object' && child && 'props' in child)) return null
+        const props = child.props as { value?: string; children?: ReactNode }
+        return <button key={`${props.value}-${index}`} type="button" className={`flex h-7 w-full items-center rounded px-2 text-left text-xs ${props.value === value ? 'bg-[#3D3D3D] text-[#FFFFFF]' : 'text-[#FFFFFFD9] hover:bg-[#FFFFFF12]'}`} onMouseDown={(event) => event.preventDefault()} onClick={() => { if (props.value) onChange(props.value); setOpen(false) }}>{props.children}</button>
+      })}
+    </div>}
+  </div>
 }
 
 function ColorField({ color, alpha, onChange, label }: { color: string; alpha: number; onChange: (color: string, alpha: number) => void; label: string }) {
@@ -114,7 +127,8 @@ function CheckRow({ label, checked, onChange, shortcut }: { label: string; check
 function fillPreview(fill: Fill) {
   if (fill.type === 'solid') return fill.color
   if (fill.type === 'linear-gradient') return `linear-gradient(${fill.angle}deg, ${fill.stops.map((stop) => `${stop.color} ${stop.position}%`).join(', ')})`
-  return `radial-gradient(circle at ${fill.center.x}% ${fill.center.y}%, ${fill.stops.map((stop) => `${stop.color} ${stop.position}%`).join(', ')})`
+  if (fill.type === 'radial-gradient') return `radial-gradient(circle at ${fill.center.x}% ${fill.center.y}%, ${fill.stops.map((stop) => `${stop.color} ${stop.position}%`).join(', ')})`
+  return '#282828'
 }
 
 export function PropertiesPanel() {
@@ -143,7 +157,8 @@ export function PropertiesPanel() {
 
   if (!project || !activePage) return <aside className="w-[300px] shrink-0 border-l border-[#373737] bg-[#2A2A2A]" />
 
-  return <aside className="flex h-full w-[clamp(280px,22vw,300px)] shrink-0 flex-col overflow-y-auto overflow-x-hidden border-l border-[#373737] bg-[#2A2A2A] pb-24 text-xs/4 text-[#FFFFFFE6] antialiased [font-synthesis:none]">
+  return <aside className="flex h-full w-[clamp(280px,22vw,300px)] shrink-0 flex-col overflow-hidden border-l border-[#373737] bg-[#2A2A2A] text-xs/4 text-[#FFFFFFE6] antialiased [font-synthesis:none]">
+    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
     <Section title="Document" actions={<><span className="font-medium text-[#FFFFFFA6]">65%</span><span className="size-[22px] rounded-full bg-[#5958B1] [outline:2px_solid_#2A2A2A]" /></>}>
       <Row><button className="h-6 grow rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties}>Copy link <span className="text-[#FFFFFF93]">Ctrl + L</span></button></Row>
     </Section>
@@ -210,10 +225,12 @@ export function PropertiesPanel() {
       {node.type === 'instance' && <Row><button className="h-6 grow rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={detachInstance}>Detach</button></Row>}
     </>}
 
-    <Section title="Guides"><Row><NumberField label="G" value={project.settings.gridSize} min={2} onChange={(gridSize) => useEditorStore.setState({ project: { ...project, settings: { ...project.settings, gridSize } } })} /><CheckRow label="Snap" checked={project.settings.snapToGrid} onChange={(snapToGrid) => useEditorStore.setState({ project: { ...project, settings: { ...project.settings, snapToGrid } } })} /></Row></Section>
-
-    <Section title="Export">
-      <Row><button className="h-6 flex-1 rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => { const json = exportJson(); if (json) downloadText(`${project.name}.bran.json`, json) }}>Project</button><button className="h-6 flex-1 rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => downloadText(`${activePage.name}.svg`, pageToSvg(activePage), 'image/svg+xml')}>SVG</button></Row>
+    <Section title="Export" collapsible defaultOpen={false}>
+      <Row><button className="h-6 flex-1 rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => { const json = exportJson(); if (json) downloadText(`${project.name}.bran.json`, json) }}>JSON</button><button className="h-6 flex-1 rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => downloadText(`${activePage.name}.svg`, pageToSvg(activePage), 'image/svg+xml')}>SVG</button></Row>
+      <Row><button className="h-6 flex-1 rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => void downloadPageRaster(activePage, `${activePage.name}.png`, 'png', 1)}>PNG</button><button className="h-6 flex-1 rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => void downloadPageRaster(activePage, `${activePage.name}.jpg`, 'jpg', 1)}>JPG</button></Row>
+      <Row><button className="h-6 flex-1 rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => void downloadPageRaster(activePage, `${activePage.name}.webp`, 'webp', 1)}>WebP</button><button className="h-6 flex-1 rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => void downloadPageRaster(activePage, `${activePage.name}.avif`, 'avif', 1)}>AVIF</button></Row>
+      <Row><button className="h-6 flex-1 rounded-[5px] bg-[#373737] pb-px font-medium leading-6 [box-shadow:var(--field-shadow)]" style={{ '--field-shadow': fieldShadow } as React.CSSProperties} onClick={() => downloadPagePdf(activePage, `${activePage.name}.pdf`)}>PDF</button></Row>
     </Section>
+    </div>
   </aside>
 }
