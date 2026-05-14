@@ -1,0 +1,27 @@
+---
+description: Bran Studio repository rules for AI coding tools
+alwaysApply: true
+---
+
+# Bran Studio Rules
+
+Read `AGENTS.md` before editing.
+
+Bran Studio is a local-first interface design editor. Preserve canvas stability, scene graph validity, and reliable `.bran.json` import/export above all else.
+
+Key invariants:
+- `Page.nodes` is source of truth.
+- `rootNodeIds` only contains nodes with `parentId: null`.
+- Child `x/y` are local to the parent.
+- Render, hit-test, selection bounds, snapping, and export must derive world positions through the tree.
+- Scene graph operations must not leave stale parent/child ids.
+- Core commands should be pure and immutable under `src/editor/core`.
+- Zustand stores orchestrate persistence, selection, and history only.
+
+Required checks before completion:
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm build`
+- `pnpm test:e2e` for visible editor, route, dashboard, canvas, or settings changes.
+
